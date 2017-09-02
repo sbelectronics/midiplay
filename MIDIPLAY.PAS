@@ -1,5 +1,16 @@
 uses midifile, dump, midiutil, mpu401, crt;
 
+procedure fix_stdio;
+var
+    screen: text;
+begin
+    assign(output, '');
+    rewrite(output);
+    assignCrt(screen);
+    rewrite(screen);
+end;
+
+
 var
     midi_file: TMidiFile;
     filename: string;
@@ -10,8 +21,10 @@ begin;
     do_playback:=false;
     quiet:=false;
     filename:='';
+    fix_stdio;
     for i:=1 to ParamCount do begin
         if ((ParamStr(i) = '-D') or (ParamStr(i)= '-d')) then begin;
+{            fix_stdio;}
             do_dump:=true;
         end else if ((ParamStr(i) = '-Q') or (ParamStr(i)= '-q')) then begin;
             quiet:=true;
@@ -42,9 +55,13 @@ begin;
     if (do_playback) then begin
         mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ);
         mpu401_play_file(midi_file);
-        while (not mpu401_idle) do begin
+        mpu401_polling;
+        writeln('press a return to exit');
+        readln;
+        writeln('a key was pressed');
+{        while (not mpu401_idle) do begin
             writeln('idling');
-            delay(1000); { do nothing }
-        end;
+            delay(1000); { do nothing
+        end; }
     end;
 end.

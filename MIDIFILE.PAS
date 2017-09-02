@@ -14,6 +14,7 @@ type
              play_count: word;
              delta_left: longint;
              complete: boolean;
+             last_msg: byte;
    end;
    TMidiFile = record
        length: longint;
@@ -23,6 +24,9 @@ type
 
        cur_track: word;
        tracks: array[0..(MAX_TRACK-1)] of TTrack;
+       track_map: array[0..15] of byte;
+       track_reverse_map: array[0..15] of byte;
+       track_voice_map: array[0..255] of byte;
    end;
 
 procedure load_midi_file(fn: string; var midifile: TMidifile);
@@ -92,6 +96,37 @@ begin
     inc(m.cur_track);
 end;
 
+procedure generate_track_map(var m: TMidiFile);
+var
+    i: integer;
+begin
+    { track 0 is for meta messages, so remap track 1 to 0, 2 to 1, ... }
+    for i:=1 to 15 do begin
+        m.track_map[i]:=i-1;
+    end;
+    m.track_map[0]:=15;
+end;
+
+procedure generate_voice_map(var m: TMidiFile);
+var
+    trk: byte;
+    i: integer;
+begin
+    for i:=0 to 15 do begin
+        trk:=m.track_map[i];
+
+        m.track_reverse_map[trk]:=i;
+
+        m.track_voice_map[$80 + i] := $80+trk;
+        m.track_voice_map[$90 + i] := $90+trk;
+        m.track_voice_map[$A0 + i] := $A0+trk;
+        m.track_voice_map[$B0 + i] := $B0+trk;
+        m.track_voice_map[$C0 + i] := $C0+trk;
+        m.track_voice_map[$D0 + i] := $D0+trk;
+        m.track_voice_map[$E0 + i] := $E0+trk;
+    end;
+end;
+
 procedure load_midi_file(fn: string; var midifile: TMidifile);
 var
     mf: file;
@@ -102,6 +137,8 @@ begin
     while (not eof(mf)) do begin
         load_chunk(mf, midifile);
     end;
+    generate_track_map(midifile);
+    generate_voice_map(midifile);
 end;
 
 end.
