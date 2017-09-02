@@ -1,15 +1,5 @@
 uses midifile, dump, midiutil, mpu401, crt;
 
-procedure playback_midi_file(var midi_file: TMidiFile);
-begin
-    mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ);
-    { need to setup ISR here... }
-    mpu401_start_play($FF); { all tracks }
-    while (not mpu401_idle) do begin
-        delay(1000); { do nothing }
-    end;
-end;
-
 var
     midi_file: TMidiFile;
     filename: string;
@@ -50,6 +40,11 @@ begin;
     end;
 
     if (do_playback) then begin
-        playback_midi_file(midi_file);
+        mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ);
+        mpu401_play_file(midi_file);
+        while (not mpu401_idle) do begin
+            writeln('idling');
+            delay(1000); { do nothing }
+        end;
     end;
 end.

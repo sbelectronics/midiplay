@@ -2,11 +2,18 @@ unit midifile;
 
 interface
 
+const
+   MAX_TRACK=16;
+   NO_DELTA_LEFT=10000000;
 type
    Pbyte = ^byte;
    TTrack = record
              length: longint;
              raw: Pbyte;
+             play_ptr: Pbyte;
+             play_count: word;
+             delta_left: longint;
+             complete: boolean;
    end;
    TMidiFile = record
        length: longint;
@@ -15,7 +22,7 @@ type
        division: word;
 
        cur_track: word;
-       tracks: array[0..15] of TTrack;
+       tracks: array[0..(MAX_TRACK-1)] of TTrack;
    end;
 
 procedure load_midi_file(fn: string; var midifile: TMidifile);
@@ -28,6 +35,8 @@ procedure load_header(var f: file; var m: TMidiFile);
 var
     chunk: string;
 begin;
+    FillChar(m, sizeof(m), 0);
+
     blockread(f, chunk[1], 4);
     chunk[0]:=chr(4);
     if (chunk <> 'MThd') then begin
