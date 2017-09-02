@@ -1,11 +1,11 @@
-uses midifile, dump, midiutil, mpu401;
+uses midifile, dump, midiutil, mpu401, crt;
 
 procedure playback_midi_file(var midi_file: TMidiFile);
 begin
     mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ);
     { need to setup ISR here... }
     mpu401_start_play($FF); { all tracks }
-    while (not mpu401_idle()) do begin
+    while (not mpu401_idle) do begin
         delay(1000); { do nothing }
     end;
 end;
