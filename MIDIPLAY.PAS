@@ -3,14 +3,15 @@ uses midifile, dump, midiutil;
 var
     midi_file: TMidiFile;
     filename: string;
-    dump, quiet: boolean;
+    do_dump, quiet: boolean;
     i: integer;
 begin;
-    dump:=false;
+    do_dump:=false;
+    quiet:=false;
     filename:='';
     for i:=1 to ParamCount do begin
         if ((ParamStr(i) = '-D') or (ParamStr(i)= '-d')) then begin;
-            dump:=true;
+            do_dump:=true;
         end else if ((ParamStr(i) = '-Q') or (ParamStr(i)= '-q')) then begin;
             quiet:=true;
         end else begin;
@@ -28,7 +29,7 @@ begin;
             ' Tracks=', midi_file.num_tracks,
             ' Division=', midi_file.division);
 
-    if (dump) then begin
+    if (do_dump) then begin
         for i:=0 to midi_file.cur_track-1 do begin
            writeln('=== Dump Track ', i, ' ===');
            dump_track(i, midi_file, quiet);
