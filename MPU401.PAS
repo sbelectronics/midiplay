@@ -19,8 +19,12 @@ interface
 uses dos, midifile, midiutil;
 
 const
-    MPU401_DEFAULT_PORT = $300;
+    MPU401_DEFAULT_PORT = $330;
     MPU401_DEFAULT_IRQ = 9;
+    DSR = 128;
+    DRR = 64;
+var
+    debug: boolean;
 
 { low-level operations }
 procedure mpu401_init(aport: word; anirq: word);
@@ -66,16 +70,20 @@ procedure mpu401_send_command(b: byte);
 var
   data: byte;
 begin
+  if (debug) then writeln('send_command: wait for DRR');
+
   { poll for DRR (bit 6) to be 0 }
-  while (port[stat_port] and 32)=32 do begin
+  while (port[stat_port] and DRR)=DRR do begin
   end;
+
+  if (debug) then writeln('send_command: DRR ready');
 
   disable_int;
 
   port[com_port]:=b;
 
   { poll for DSR (bit 7) to be 0 }
-  while (port[stat_port] and 64)=64 do begin
+  while (port[stat_port] and DSR)=DSR do begin
   end;
 
   repeat
@@ -86,12 +94,14 @@ begin
   until (data = $FE);
 
   enable_int;
+
+  if (debug) then writeln('send_command: complete');
 end;
 
 procedure mpu401_send_data(b: byte);
 begin
   { poll for DRR (bit 6) to be 0 }
-  while (port[stat_port] and 32)=32 do begin
+  while (port[stat_port] and DRR)=DRR do begin
   end;
 
   port[data_port] := b;
@@ -100,7 +110,7 @@ end;
 function mpu401_get_data: byte;
 begin
   { poll for DSR (bit 7) to be 0 }
-  while (port[stat_port] and 64)=64 do begin
+  while (port[stat_port] and DSR)=DSR do begin
   end;
 
   mpu401_get_data := port[data_port];
@@ -108,10 +118,12 @@ end;
 
 procedure mpu401_start_play(trackmask: byte);
 begin
+    if (debug) then writeln('starting start_play');
     mpu401_send_command($EC);     { activate tracks }
     mpu401_send_data(trackmask);
     mpu401_send_command($B8);     { clear play counters }
     mpu401_send_command($0A);     { start play }
+    if (debug) then writeln('done start_play');
 end;
 
 procedure mpu401_stop_play;
@@ -262,12 +274,17 @@ begin
 
     old_intvec:=NIL;
     old_exitproc:=ExitProc;
+    if (debug) then writeln('set exitproc');
     ExitProc:=@background_exithandler;
     GetIntVec(irq, old_intvec);
+    if (debug) then writeln('set int vec');
     SetIntVec(irq, @mpu401_isr);
+
+    if (debug) then writeln('init complete');
 end;
 
 begin
+    debug:=true;
     old_exitproc:=NIL;
     old_intvec:=NIL;
 end.
