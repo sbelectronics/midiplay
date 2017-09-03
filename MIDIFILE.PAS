@@ -109,6 +109,8 @@ begin
         for i:=1 to 15 do begin
             m.track_map[i]:=i;
         end;
+
+        m.enable_conductor:=false; { no conductor track }
     end else begin
         { track 0 is for meta messages, so remap track 1 to 0, 2 to 1, ... }
         for i:=1 to 15 do begin
@@ -116,7 +118,7 @@ begin
         end;
         m.track_map[0]:=15;
 
-        m.enable_conductor:=false;   { true;    not working yet... }
+        m.enable_conductor:=true;  {  conductor will use track 0 }
         m.conductor_track_num:=0;
     end;
 

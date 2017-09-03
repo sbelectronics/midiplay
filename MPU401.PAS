@@ -147,7 +147,7 @@ end;
 
 function tempo_to_bpm(tempo: longint): byte;
 begin
-    tempo_to_bpm:=round(tempo*120.0/500000.0);
+    tempo_to_bpm:=round(60000000/tempo);
 end;
 
 procedure mpu401_start_play(trackmask: byte; division: word; enable_conductor: boolean);
@@ -292,6 +292,7 @@ begin
                 mpu401_send_data($E0); { set tempo }
                 mpu401_send_data(tempo_to_bpm(tempo));
                 if (isr_debug) then writeln('send tempo change to ', tempo_to_bpm(tempo));
+                exit; { RETURN }
             end else begin
                 if (isr_debug) then writeln('skip meta');
                 delta_left:=NO_DELTA_LEFT;
