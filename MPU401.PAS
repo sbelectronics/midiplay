@@ -28,7 +28,7 @@ var
     isr_debug: boolean;
 
 { low-level operations }
-procedure mpu401_init(aport: word; anirq: word);
+procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
 procedure mpu401_send_command(b: byte);
 procedure mpu401_send_data(b: byte);
 function mpu401_get_data: byte;
@@ -239,7 +239,7 @@ begin
 
             if (meta = $2F) then begin
                 { end of track }
-                writeln('send FC due to 2F');
+                if (isr_debug) then writeln('send FC due to 2F');
                 mpu401_send_data(delta_left);
                 delta_left:=NO_DELTA_LEFT;
                 mpu401_send_data($FC);
@@ -297,10 +297,17 @@ procedure mpu401_isr; interrupt;
 var
     b: byte;
 begin
-    if (isr_debug) then write('ISR ');
-    b:=mpu401_get_data;
-    if (isr_debug) then writeln(b);
-    mpu401_handle_data(b);
+{    disable_int;}
+    if (isr_debug) then writeln('ISR');
+    while (port[stat_port] and DSR)=0 do begin
+        b:=port[data_port];
+        if (isr_debug) then writeln('ISR DATA ', b);
+        mpu401_handle_data(b);
+    end;
+{    enable_int;}
+    { tell the 8259 we have completed our ISR }
+    port[$A0] := $20;
+    port[$20] := $20;
 end;
 {$F-}
 
@@ -314,7 +321,7 @@ begin;
   end;
 end;
 
-procedure mpu401_init(aport: word; anirq: word);
+procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
 var
     junk: byte;
 begin
@@ -332,11 +339,14 @@ begin
 
     old_intvec:=NIL;
     old_exitproc:=ExitProc;
-{    if (debug) then writeln('set exitproc');
-    ExitProc:=@background_exithandler;
-    GetIntVec(vec, old_intvec);
-    if (debug) then writeln('set int vec');
-    SetIntVec(vec, @mpu401_isr);}
+
+    if (install_isr) then begin
+        if (debug) then writeln('set exitproc');
+        ExitProc:=@background_exithandler;
+        GetIntVec(vec, old_intvec);
+        if (debug) then writeln('set int vec');
+        SetIntVec(vec, @mpu401_isr);
+    end;
 
     mpu401_send_command($FF); { reset }
     delay(100);
