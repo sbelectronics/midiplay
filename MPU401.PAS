@@ -9,7 +9,8 @@
   After that, the MPU-401 will send track data requests
       The ISR will handle the track data requests
 
-  This is all 100% untested. I don't even have my MT-32 or MPU-401 yet.
+  Tested under dropbox. See the readme to know what works and what
+  does not.
 }
 
 unit mpu401;
@@ -362,6 +363,9 @@ begin
     while true do begin
         b:=mpu401_get_data;
         mpu401_handle_data(b);
+        if keypressed then begin
+            exit;
+        end;
     end;
 end;
 
