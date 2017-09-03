@@ -41,7 +41,10 @@ var
     midi_file: TMidiFile;
     filename: string;
     do_dump, do_playback, do_help, do_primes, quiet, polling: boolean;
+    debug, debug_isr: boolean;
     i: integer;
+    param: string;
+    remap: TRemap;
 begin;
     do_dump:=false;
     do_playback:=false;
@@ -49,22 +52,31 @@ begin;
     do_primes:=false;
     quiet:=false;
     polling:=false;
+    debug:=false;
+    debug_isr:=false;
+    remap:=REMAP_PLUS_ONE;
     filename:='';
     fix_stdio;
     for i:=1 to ParamCount do begin
-        if ((ParamStr(i) = '-D') or (ParamStr(i)= '-d')) then begin;
-{            fix_stdio;}
+        param:=upstr(ParamStr(i));
+        if (param = '-D') then begin
             do_dump:=true;
-        end else if ((ParamStr(i) = '-Q') or (ParamStr(i)= '-q')) then begin;
+        end else if (param = '-Q') then begin
             quiet:=true;
-        end else if ((ParamStr(i) = '-P') or (ParamStr(i)= '-p')) then begin;
+        end else if (param = '-P') then begin
             do_playback:=true;
-        end else if ((ParamStr(i) = '-O') or (ParamStr(i)= '-o')) then begin;
+        end else if (param = '-O') then begin
             polling:=true;
-        end else if ((ParamStr(i) = '-H') or (ParamStr(i)= '-h')) then begin;
+        end else if (param = '-H') then begin
             do_help:=true;
-        end else if ((ParamStr(i) = '-R') or (ParamStr(i)= '-r')) then begin;
+        end else if (param = '-R') then begin
             do_primes:=true;
+        end else if (param = '-V') then begin
+            debug:=true;
+        end else if (param = '-VV') then begin
+            debug_isr:=true;
+        end else if (param = '-M0') then begin
+            remap:=REMAP_NONE;
         end else begin;
             filename:=ParamStr(i);
         end;
@@ -80,7 +92,7 @@ begin;
         exit;
     end;
 
-    load_midi_file(filename, midi_file);
+    load_midi_file(filename, midi_file, remap);
     writeln('Format=', midi_file.format,
             ' Tracks=', midi_file.num_tracks,
             ' Division=', midi_file.division);
@@ -93,6 +105,7 @@ begin;
     end;
 
     if (do_playback) then begin
+        mpu401_set_debug(debug, debug_isr);
         mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ, not polling);
         mpu401_play_file(midi_file);
         if polling then begin;

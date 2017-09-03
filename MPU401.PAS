@@ -27,6 +27,7 @@ const
 var
     debug: boolean;
     isr_debug: boolean;
+    division_div: longint;
 
 { low-level operations }
 procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
@@ -42,9 +43,12 @@ procedure mpu401_stop_play;
 procedure mpu401_play_file(var m: TMidiFile);
 function mpu401_idle: boolean;
 
+{ ISR stuff }
 procedure mpu401_handle_data(b: byte);
-
 procedure mpu401_polling;
+
+{ misc }
+procedure mpu401_set_debug(adebug: boolean; adebug_isr: boolean);
 
 implementation
 
@@ -74,7 +78,7 @@ procedure mpu401_send_command(b: byte);
 var
   data: byte;
 begin
-  if (debug) then writeln('send_command: wait for DRR');
+  if (debug) then writeln('send_command (', b, '): wait for DRR');
 
   { poll for DRR (bit 6) to be 0 }
   while (port[stat_port] and DRR)=DRR do begin
@@ -143,6 +147,12 @@ end;
 
 procedure mpu401_start_play(trackmask: byte; division: word);
 begin
+    division_div:=1;
+    if (division = 480) then begin
+        division_div:=4;
+        division:=120;
+    end;
+
     if (debug) then writeln('starting start_play');
     mpu401_send_command(division_to_timebase(division));
     mpu401_send_command($EC);     { activate tracks }
@@ -183,6 +193,9 @@ begin
         end;
         if (delta_left = NO_DELTA_LEFT) then begin
             scan_varint(play_ptr, this_len, delta_left);
+            if (division_div <> 1) then begin
+                delta_left:=round(delta_left/division_div);
+            end;
             play_count:=play_count+this_len;
             if (isr_debug) then writeln('delta ', delta_left);
         end;
@@ -369,8 +382,14 @@ begin
     end;
 end;
 
+procedure mpu401_set_debug(adebug: boolean; adebug_isr: boolean);
 begin
-    debug:=true;
+    debug:=adebug;
+    isr_debug:=adebug_isr;
+end;
+
+begin
+    debug:=false;
     isr_debug:=false;
     old_exitproc:=NIL;
     old_intvec:=NIL;

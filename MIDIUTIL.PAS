@@ -8,6 +8,8 @@ procedure scan_varint(var p: Pbyte; var count: byte; var dest: longint);
 procedure read_be_word(var f: file; var dest: word);
 procedure read_be_longint(var f: file; var dest: longint);
 
+function upstr(s: string): string;
+
 implementation
 
 procedure scan_varint(var p: Pbyte; var count: byte; var dest: longint);
@@ -49,5 +51,14 @@ begin
   blockread(f, b, 1);
   dest:=(dest shl 8)+b;
 end;
+
+function upstr(s: string): string;
+var
+    i: integer;
+begin
+    for i:=1 to length(s) do s[i]:=upcase(s[i]);
+    upstr:=s;
+end;
+
 
 end.

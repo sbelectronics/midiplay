@@ -7,6 +7,7 @@ const
    NO_DELTA_LEFT=10000000;
 type
    Pbyte = ^byte;
+   TRemap = (REMAP_PLUS_ONE, REMAP_NONE);
    TTrack = record
              length: longint;
              raw: Pbyte;
@@ -30,7 +31,7 @@ type
        channel_msg_map: array[0..255] of byte;
    end;
 
-procedure load_midi_file(fn: string; var midifile: TMidifile);
+procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap);
 
 implementation
 
@@ -97,15 +98,21 @@ begin
     inc(m.cur_track);
 end;
 
-procedure generate_track_map(var m: TMidiFile);
+procedure generate_track_map(var m: TMidiFile; remap: TRemap);
 var
     i: integer;
 begin
-    { track 0 is for meta messages, so remap track 1 to 0, 2 to 1, ... }
-    for i:=1 to 15 do begin
-        m.track_map[i]:=i-1;
+    if (remap=REMAP_NONE) then begin
+        for i:=1 to 15 do begin
+            m.track_map[i]:=i;
+        end;
+    end else begin
+        { track 0 is for meta messages, so remap track 1 to 0, 2 to 1, ... }
+        for i:=1 to 15 do begin
+            m.track_map[i]:=i-1;
+        end;
+        m.track_map[0]:=15;
     end;
-    m.track_map[0]:=15;
 
     { channel map is just straight through }
     for i:=0 to 15 do begin
@@ -136,7 +143,7 @@ begin
     end;
 end;
 
-procedure load_midi_file(fn: string; var midifile: TMidifile);
+procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap);
 var
     mf: file;
 begin
@@ -146,7 +153,7 @@ begin
     while (not eof(mf)) do begin
         load_chunk(mf, midifile);
     end;
-    generate_track_map(midifile);
+    generate_track_map(midifile, remap);
     generate_voice_map(midifile);
 end;
 
