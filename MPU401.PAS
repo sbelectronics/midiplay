@@ -215,7 +215,7 @@ begin
         if (msg>=$80) and (msg<$F0) then begin
             mpu401_send_data(delta_left);  { send the timing byte }
             delta_left:=NO_DELTA_LEFT;
-            mpu401_send_data(m_playing.track_voice_map[msg]);
+            mpu401_send_data(m_playing.channel_msg_map[msg]);
             mpu401_send_data(play_ptr^);
             inc(play_ptr);
             inc(play_count);
