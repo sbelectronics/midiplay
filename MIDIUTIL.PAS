@@ -4,13 +4,22 @@ interface
 
 uses midifile;
 
+function hex(b: byte): string;
 procedure scan_varint(var p: Pbyte; var count: byte; var dest: longint);
+procedure scan_3byte(var p: PByte; var val: longint);
 procedure read_be_word(var f: file; var dest: word);
 procedure read_be_longint(var f: file; var dest: longint);
 
 function upstr(s: string): string;
 
 implementation
+
+function hex(b: byte): string;
+const
+    hexc: array[0..15] of char = '0123456789ABCDEF';
+begin
+    hex:=hexc[b shr 4] + hexc[b and $0F];
+end;
 
 procedure scan_varint(var p: Pbyte; var count: byte; var dest: longint);
 var
@@ -29,6 +38,16 @@ begin
         b:=1;
     end;
 end;
+
+procedure scan_3byte(var p: PByte; var val: longint);
+begin
+    val:=p^;
+    inc(p);
+    val:=(val shl 8) + p^;
+    inc(p);
+    val:=(val shl 8) + p^;
+end;
+
 
 
 procedure read_be_word(var f: file; var dest: word);

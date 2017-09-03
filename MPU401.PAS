@@ -78,7 +78,7 @@ procedure mpu401_send_command(b: byte);
 var
   data: byte;
 begin
-  if (debug) then writeln('send_command (', b, '): wait for DRR');
+  if (debug) then writeln('send_command (', hex(b), '): wait for DRR');
 
   { poll for DRR (bit 6) to be 0 }
   while (port[stat_port] and DRR)=DRR do begin
@@ -112,7 +112,7 @@ begin
   while (port[stat_port] and DRR)=DRR do begin
   end;
 
-  if (isr_debug) then writeln('send data ',b);
+  if (isr_debug) then writeln('send data ',hex(b));
 
   port[data_port] := b;
 end;
@@ -212,7 +212,7 @@ begin
         inc(play_ptr);
         inc(play_count);
 
-        if (isr_debug) then writeln('msg  ',msg);
+        if (isr_debug) then writeln('msg  ',hex(msg));
 
         if (msg<=$7F) then begin
             { running status }
@@ -242,7 +242,7 @@ begin
             exit; { RETURN }
         end else if (msg=$FF) then begin { meta }
             meta:=play_ptr^;
-            if (isr_debug) then writeln('meta ', meta);
+            if (isr_debug) then writeln('meta ', hex(meta));
             inc(play_ptr);
             inc(play_count);
             scan_varint(play_ptr, this_len, meta_len);
@@ -315,7 +315,7 @@ begin
     if (isr_debug) then writeln('ISR');
     while (port[stat_port] and DSR)=0 do begin
         b:=port[data_port];
-        if (isr_debug) then writeln('ISR DATA ', b);
+        if (isr_debug) then writeln('ISR DATA ', hex(b));
         mpu401_handle_data(b);
     end;
 {    enable_int;}
