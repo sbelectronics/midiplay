@@ -29,6 +29,9 @@ type
        track_reverse_map: array[0..15] of byte;
        channel_map: array[0..15] of byte;
        channel_msg_map: array[0..255] of byte;
+
+       enable_conductor: boolean;
+       conductor_track_num: byte;
    end;
 
 procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap);
@@ -112,6 +115,9 @@ begin
             m.track_map[i]:=i-1;
         end;
         m.track_map[0]:=15;
+
+        m.enable_conductor:=false;   { true;    not working yet... }
+        m.conductor_track_num:=0;
     end;
 
     { channel map is just straight through }

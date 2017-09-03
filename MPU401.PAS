@@ -36,7 +36,7 @@ procedure mpu401_send_data(b: byte);
 function mpu401_get_data: byte;
 
 { intermediate operations }
-procedure mpu401_start_play(trackmask: byte; division: word);
+procedure mpu401_start_play(trackmask: byte; division: word; enable_conductor: boolean);
 procedure mpu401_stop_play;
 
 { high-level operations }
@@ -145,7 +145,12 @@ begin
     end;
 end;
 
-procedure mpu401_start_play(trackmask: byte; division: word);
+function tempo_to_bpm(tempo: longint): byte;
+begin
+    tempo_to_bpm:=round(tempo*120.0/500000.0);
+end;
+
+procedure mpu401_start_play(trackmask: byte; division: word; enable_conductor: boolean);
 begin
     division_div:=1;
     if (division = 480) then begin
@@ -157,6 +162,11 @@ begin
     mpu401_send_command(division_to_timebase(division));
     mpu401_send_command($EC);     { activate tracks }
     mpu401_send_data(trackmask);
+    if (enable_conductor) then begin
+        mpu401_send_command($8F);
+    end else begin
+        mpu401_send_command($8E);
+    end;
     mpu401_send_command($B8);     { clear play counters }
     mpu401_send_command($0A);     { start play }
     if (debug) then writeln('done start_play');
@@ -167,13 +177,17 @@ begin
     mpu401_send_command($05);
 end;
 
-procedure mpu401_handle_track_data_req(track_num: byte);
+procedure mpu401_handle_track_data_req(track_num: byte; conductor: boolean);
 var
   this_len: byte;
   msg, meta: byte;
   meta_len: longint;
+  meta_ptr: Pbyte;
+  tempo: longint;
 begin
-  track_num:=m_playing.track_reverse_map[track_num];
+  if (not conductor) then begin
+      track_num:=m_playing.track_reverse_map[track_num];
+  end;
 
   if (isr_debug) then writeln('track_data_req ', track_num);
 
@@ -226,20 +240,32 @@ begin
         last_msg:=msg;
 
         if (msg>=$80) and (msg<$F0) then begin
-            mpu401_send_data(delta_left);  { send the timing byte }
-            delta_left:=NO_DELTA_LEFT;
-            mpu401_send_data(m_playing.channel_msg_map[msg]);
-            mpu401_send_data(play_ptr^);
-            inc(play_ptr);
-            inc(play_count);
-            if (msg<$C0) or (msg>=$E0) then begin
-                { any thing not Cx or Dx is a two-byte message }
+            if (conductor) then begin
+                { if conductor, ignore notes as there shouldn't be any }
+                delta_left:=NO_DELTA_LEFT;
+                inc(play_ptr);
+                inc(play_count);
+                if (msg<$C0) or (msg>=$E0) then begin
+                    inc(play_ptr);
+                    inc(play_count);
+                end;
+                if (isr_debug) then writeln('ignore voice in conductor channel');
+            end else begin;
+                mpu401_send_data(delta_left);  { send the timing byte }
+                delta_left:=NO_DELTA_LEFT;
+                mpu401_send_data(m_playing.channel_msg_map[msg]);
                 mpu401_send_data(play_ptr^);
                 inc(play_ptr);
                 inc(play_count);
+                if (msg<$C0) or (msg>=$E0) then begin
+                    { any thing not Cx or Dx is a two-byte message }
+                    mpu401_send_data(play_ptr^);
+                    inc(play_ptr);
+                    inc(play_count);
+                end;
+                if (isr_debug) then writeln('send voice ');
+                exit; { RETURN }
             end;
-            if (isr_debug) then writeln('send voice ');
-            exit; { RETURN }
         end else if (msg=$FF) then begin { meta }
             meta:=play_ptr^;
             if (isr_debug) then writeln('meta ', hex(meta));
@@ -248,6 +274,7 @@ begin
             scan_varint(play_ptr, this_len, meta_len);
             play_count:=play_count+this_len;
             play_count:=play_count+meta_len;
+            meta_ptr:=play_ptr;
             inc(play_ptr, meta_len);
             if (isr_debug) then writeln('meta_len ', meta_len);
 
@@ -258,13 +285,31 @@ begin
                 delta_left:=NO_DELTA_LEFT;
                 mpu401_send_data($FC);
                 exit; { RETURN }
+            end else if (meta = $51) and conductor then begin
+                { tempo change }
+                scan_3byte(meta_ptr, tempo);
+                mpu401_send_data(delta_left);
+                mpu401_send_data($E0); { set tempo }
+                mpu401_send_data(tempo_to_bpm(tempo));
+                if (isr_debug) then writeln('send tempo change to ', tempo_to_bpm(tempo));
             end else begin
                 if (isr_debug) then writeln('skip meta');
                 delta_left:=NO_DELTA_LEFT;
                 { ignore the meta, and loop around }
             end;
+        end else if (msg = $F0) then begin
+            { sysex - ignore it }
+            if (isr_debug) then writeln('skip sysex');
+            delta_left:=NO_DELTA_LEFT;
+            while (play_ptr^ <> $F7) do begin
+                inc(play_ptr);
+                inc(play_count);
+            end;
+            inc(play_ptr);
+            inc(play_count);
         end else begin
             { uh oh! }
+            writeln('ERROR: encountered bad msg byte ', hex(msg));
         end;
     end;
   end;
@@ -273,13 +318,18 @@ end;
 procedure mpu401_handle_data(b: byte);
 begin
     if (b>=$F0) and (b<=$F7) then begin
-        mpu401_handle_track_data_req(b-$F0);
+        mpu401_handle_track_data_req(b-$F0, false); { voice track }
+    end else if (b=$F9) then begin
+        mpu401_handle_track_data_req(m_playing.conductor_track_num, true); { conductor }
+    end else begin
+        writeln('ERROR: bad byte in handle_data ', hex(b));
     end;
 end;
 
 procedure mpu401_play_file(var m: TMidiFile);
 var
     i: integer;
+    enable_conductor: boolean;
 begin
     for i:=0 to (MAX_TRACK-1) do begin
        m.tracks[i].play_ptr:=m.tracks[i].raw;
@@ -288,7 +338,7 @@ begin
     end;
     m_playing:=m;
     { now, start the mpu-401 }
-    mpu401_start_play($FF, m.division);
+    mpu401_start_play($FF, m.division, m.enable_conductor);
 end;
 
 function mpu401_idle: boolean;
