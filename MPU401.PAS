@@ -42,6 +42,7 @@ procedure mpu401_stop_play;
 { high-level operations }
 procedure mpu401_play_file(var m: TMidiFile);
 function mpu401_idle: boolean;
+function mpu401_done_playing: boolean;
 
 { ISR stuff }
 procedure mpu401_handle_data(b: byte);
@@ -322,6 +323,9 @@ begin
         mpu401_handle_track_data_req(b-$F0, false); { voice track }
     end else if (b=$F9) then begin
         mpu401_handle_track_data_req(m_playing.conductor_track_num, true); { conductor }
+    end else if (b=$FC) then begin
+        if (isr_debug) then writeln('FC All  End Received');
+        m_playing.done_playing:=true;
     end else begin
         writeln('ERROR: bad byte in handle_data ', hex(b));
     end;
@@ -337,9 +341,15 @@ begin
        m.tracks[i].play_count:=0;
        m.tracks[i].delta_left:=NO_DELTA_LEFT;
     end;
+    m.done_playing:=false;
     m_playing:=m;
     { now, start the mpu-401 }
     mpu401_start_play($FF, m.division, m.enable_conductor);
+end;
+
+function mpu401_done_playing: boolean;
+begin
+    mpu401_done_playing:=m_playing.done_playing;
 end;
 
 function mpu401_idle: boolean;
@@ -427,6 +437,10 @@ begin
     while true do begin
         b:=mpu401_get_data;
         mpu401_handle_data(b);
+        if mpu401_done_playing then begin
+            writeln('Song Complete.');
+            exit;
+        end;
         if keypressed then begin
             exit;
         end;

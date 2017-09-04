@@ -1,3 +1,12 @@
+{
+  midiplay.pas
+  Scott M Baker
+  http://www.smbaker.com/
+
+  Main unit for the midi player. Processes command line arguments,
+  initializes things, complains, etc.
+}
+
 uses midifile, dump, midiutil, mpu401, crt;
 
 procedure fix_stdio;
@@ -9,6 +18,13 @@ begin
     assignCrt(screen);
     rewrite(screen);
 end;
+
+{
+  bruteprime
+
+  Waste cpu cycles computing primes in a very inefficient way. This is to
+  prove we can do useful work while playing midi files
+}
 
 procedure bruteprime;
 var
@@ -30,6 +46,10 @@ begin
            write(n);
        end;
        n:=n+1;
+       if mpu401_done_playing then begin
+           writeln('Song Complete.');
+           exit;
+       end;
        if keypressed then begin
            exit;
        end;
@@ -46,6 +66,11 @@ var
     param: string;
     remap: TRemap;
 begin;
+    writeln('MPU-401 Intelligent Mode Player');
+    writeln('Dr Scott M. Baker');
+    writeln('http://www.smbaker.com/');
+    writeln;
+
     do_dump:=false;
     do_playback:=false;
     do_help:=false;
@@ -82,17 +107,26 @@ begin;
         end;
     end;
 
+    if (not do_playback) and (not do_dump) then begin
+        writeln('(Hint: use "-H" for help or "-P <filename.mid>" to play a file)');
+        writeln;
+    end;
+
     if (filename='') or (do_help) then begin
-        writeln('Syntax: midiplay [-D] filename.mid');
+        writeln('Syntax: midiplay [options] filename.mid');
+        writeln('   -H show help');
         writeln('   -P play file');
         writeln('   -D dump');
         writeln('   -Q when dumping, dump quietly');
         writeln('   -O use polling instead of ISR');
         writeln('   -R compute prime numbers while doing background playback');
+        writeln('   -M0 do not remap tracks');
+        writeln('   -V be somewhat verbose');
+        writeln('   -VV be even more verbose');
         exit;
     end;
 
-    load_midi_file(filename, midi_file, remap);
+    load_midi_file(filename, midi_file, remap, debug);
     writeln('Format=', midi_file.format,
             ' Tracks=', midi_file.num_tracks,
             ' Division=', midi_file.division);
@@ -116,12 +150,11 @@ begin;
             if (do_primes) then begin
                 bruteprime;
             end else begin
-                while (not keypressed) do delay(100);
+                while (not keypressed) and (not mpu401_done_playing) do delay(100);
+                if mpu401_done_playing then begin
+                    writeln('Song Complete.');
+                end;
             end;
-    {        while (not mpu401_idle) do begin
-                writeln('idling');
-                delay(1000); { do nothing
-            end; }
         end;
         mpu401_stop_play;
     end;

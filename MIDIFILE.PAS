@@ -32,9 +32,14 @@ type
 
        enable_conductor: boolean;
        conductor_track_num: byte;
+
+       done_playing: boolean;
    end;
 
-procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap);
+procedure load_midi_file(fn: string;
+                         var midifile: TMidifile;
+                         remap: TRemap;
+                         debug: boolean);
 
 implementation
 
@@ -63,7 +68,7 @@ begin;
     m.cur_track := 0;
 end;
 
-procedure load_chunk(var f: file; var m: TMidiFile);
+procedure load_chunk(var f: file; var m: TMidiFile; debug: boolean);
 var
     chunk: string;
     length, readlength: longint;
@@ -76,7 +81,7 @@ begin
         writeln('Skip ', chunk);
         seek(f, filepos(f) + length);
     end;
-    writeln('Read Track length=', length);
+    if (debug) then writeln('Read Track length=', length);
 
     skip:=0;
     readlength:=length;
@@ -151,7 +156,7 @@ begin
     end;
 end;
 
-procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap);
+procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap; debug: boolean);
 var
     mf: file;
 begin
@@ -159,10 +164,11 @@ begin
     reset(mf,1);
     load_header(mf, midifile);
     while (not eof(mf)) do begin
-        load_chunk(mf, midifile);
+        load_chunk(mf, midifile, debug);
     end;
     generate_track_map(midifile, remap);
     generate_voice_map(midifile);
+    writeln('Load Complete.');
 end;
 
 end.
