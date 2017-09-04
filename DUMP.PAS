@@ -31,11 +31,11 @@ begin
     if (kind = $51) then begin
         scan_3byte(p, tempo);
         count:=count+3;
-        writeln('tempo ', tempo);
+        if (not quiet) then writeln('tempo ', tempo);
     end else begin
         count:=count+meta_len;
         inc(p, meta_len);
-        writeln;
+        if (not quiet) then writeln;
     end;
 end;
 
