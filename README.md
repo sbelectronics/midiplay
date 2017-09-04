@@ -12,17 +12,21 @@ Status
 - works in polling mode (-O)
 - works in interrupt-drive mode (default)
 - Does not support sysex
-- Does not support conductor (no tempo changes, etc)
+- Supports conductor for tempo changes
 - Track 0 is ignored, and assumed to be all meta/sysex stuff
-- Tracks 1-8 are mapped to 0-7
 - Only supports 8 tracks, because that's all the MPU-401 supports
 
 I suggest you confine yourself to reasonable, relatively small midi files. Those huge sierra soundtracks out there that are 600 KB or more are bound to just cause problems.
 
-I tested this using some midi files from http://ftp.monash.edu.au/pub/midi.songs/MT-32/
+I first tested this using some midi files from http://ftp.monash.edu.au/pub/midi.songs/MT-32/
 
 - `buster.mid`: a very simple one-track ghostbusters theme song
 - `afterdrk.mid`: a complex song with about a dozen tracks, note that it'll take about 30 seconds before you start to hear sound.
+- `styx-32.mid`: Some Styx music. This sounds pretty good on an MT-32
+
+For a real treat, try some of the monkey island music from the Scumm Bar at `https://scummbar.com/resources/downloads/midi/mimp.zip`. Note that this archive includes both MT-32 and GM midi files. If you're playing on an MT-32 then I recommend ML_1.MID. It's sounds awesome.
+
+Note when playing in DOSBOX -- the sound bank that Windows chooses by default for the software emulation (`Microsoft GS Wavetable Synth') is not the MT-32 sound bank, and I found that the instrument sounds were all screwed up. I'm sure there's a way to change this in windows, but for my development I ended up just connecting a MT-32 via USB-MIDI adapter. Can't beat real MT-32 sound.
 
 ## Why intelligent mode?
 
@@ -36,7 +40,9 @@ So why write an intelligent mode player? Well, first of all, I couldn't find an 
 
 ## Limitations
 
-The MPU-401 only supports 8 channels. Many midi files use more than 8 channels. You won't hear the sound from those other channels. Bummer.
+The MPU-401 only supports 8 tracks. Many midi files use more than 8 tracks. You won't hear the sound from those other tracks. Bummer.
+
+I'm considering writing a subroutine to merge tracks to handle the case where there's more than one. I have no idea if this will work. 
 
 ## Using the program
 
