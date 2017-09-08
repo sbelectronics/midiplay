@@ -30,6 +30,17 @@ var
     division_mul: byte;
     division_div: byte;
 
+    { The ISR takes around 843 bytes of stack space due to the writeln
+      statements (even if they're not executed!). So allocate a private
+      stack for the ISR. 2K should be way more than is necessary.
+    }
+
+    isr_stack: array[1..2048] of byte;
+    isr_stack_seg: word;
+    isr_stack_ptr: word;
+    save_stack_seg: word;
+    save_stack_ptr: word;
+
 { low-level operations }
 procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
 procedure mpu401_send_command(b: byte);
@@ -51,6 +62,8 @@ procedure mpu401_polling;
 
 { misc }
 procedure mpu401_set_debug(adebug: boolean; adebug_isr: boolean);
+
+procedure stack_analysis;
 
 implementation
 
@@ -375,38 +388,7 @@ begin
     mpu401_idle := true;
 end;
 
-var
-    large_stack: array[1..4096] of char;
-    large_stack_seg: word;
-    large_stack_ptr: word;
-    save_stack_seg: word;
-    save_stack_ptr: word;
-
-procedure mpu401_isr_inside; forward;
-
-{$F+}
-procedure mpu401_isr; interrupt;
-begin
-    asm
-       cli
-       mov save_stack_seg, SS
-       mov save_stack_ptr, SP
-       mov SS, large_stack_seg
-       mov SP, large_stack_ptr
-       sti
-    end;
-    mpu401_isr_inside;
-    asm
-       cli
-       mov SS, save_stack_seg;
-       mov SP, save_stack_ptr;
-       sti
-    end;
-end;
-
-{$F-}
-
-procedure mpu401_isr_inside;
+procedure mpu401_isr;
 var
     b: byte;
 begin
@@ -422,6 +404,29 @@ begin
     port[$A0] := $20;
     port[$20] := $20;
 end;
+
+{$F+}
+procedure mpu401_isr_wrapper; interrupt;
+begin
+    { wrap the ISR with a private stack }
+    asm
+       cli
+       mov save_stack_seg, SS
+       mov save_stack_ptr, SP
+       mov SS, isr_stack_seg
+       mov SP, isr_stack_ptr
+       sti
+    end;
+    mpu401_isr;
+    asm
+       cli
+       mov SS, save_stack_seg;
+       mov SP, save_stack_ptr;
+       sti
+    end;
+end;
+
+{$F-}
 
 procedure background_exithandler; far;
 begin;
@@ -457,7 +462,7 @@ begin
         ExitProc:=@background_exithandler;
         GetIntVec(vec, old_intvec);
         if (debug) then writeln('set int vec');
-        SetIntVec(vec, @mpu401_isr);
+        SetIntVec(vec, @mpu401_isr_wrapper);
     end;
 
     mpu401_send_command($FF); { reset }
@@ -490,9 +495,28 @@ begin
     isr_debug:=adebug_isr;
 end;
 
+procedure stack_analysis;
+var
+   i: integer;
 begin
-    large_stack_seg:=seg(large_stack[4000]);
-    large_stack_ptr:=ofs(large_stack[4000]);
+    for i := 1 to sizeof(isr_stack) do begin
+        if isr_stack[i] <> $F3 then begin
+            writeln('stack used ', sizeof(isr_stack)-i+1);
+            exit;
+        end;
+    end;
+end;
+
+begin
+    { Setup the private stack. Fill it with some random byte (F3) so we
+      can analyze it for consumption later if we want to. Stack operations
+      are decrement and then write, so we could point to the very end, but
+      I set the pointer 8 in from the end, just to be safe.
+    }
+    fillchar(isr_stack, sizeof(isr_stack), $F3);
+    isr_stack_seg:=seg(isr_stack[sizeof(isr_stack)-8]);
+    isr_stack_ptr:=ofs(isr_stack[sizeof(isr_stack)-8]);
+
     debug:=false;
     isr_debug:=false;
     old_exitproc:=NIL;

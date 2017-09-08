@@ -157,5 +157,6 @@ begin;
             end;
         end;
         mpu401_stop_play;
+        { stack_analysis; }
     end;
 end.
