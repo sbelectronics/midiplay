@@ -27,7 +27,8 @@ const
 var
     debug: boolean;
     isr_debug: boolean;
-    division_div: longint;
+    division_mul: byte;
+    division_div: byte;
 
 { low-level operations }
 procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
@@ -153,8 +154,15 @@ end;
 
 procedure mpu401_start_play(trackmask: byte; division: word; enable_conductor: boolean);
 begin
+    { hardcoding some divisions that aren't directly supported by the
+      mpu-401... Probably ought to find a way to do this automatically.
+    }
     division_div:=1;
-    if (division = 480) then begin
+    division_mul:=1;
+    if (division = 48) then begin
+        division_mul:=2;
+        division:=96;
+    end else if (division = 480) then begin
         division_div:=4;
         division:=120;
     end;
@@ -208,8 +216,8 @@ begin
         end;
         if (delta_left = NO_DELTA_LEFT) then begin
             scan_varint(play_ptr, this_len, delta_left);
-            if (division_div <> 1) then begin
-                delta_left:=round(delta_left/division_div);
+            if (division_div <> 1) or (division_mul <> 1) then begin
+                delta_left:=round(delta_left*division_mul/division_div);
             end;
             play_count:=play_count+this_len;
             if (isr_debug) then writeln('delta ', delta_left);
@@ -367,24 +375,53 @@ begin
     mpu401_idle := true;
 end;
 
+var
+    large_stack: array[1..4096] of char;
+    large_stack_seg: word;
+    large_stack_ptr: word;
+    save_stack_seg: word;
+    save_stack_ptr: word;
+
+procedure mpu401_isr_inside; forward;
+
 {$F+}
 procedure mpu401_isr; interrupt;
+begin
+    asm
+       cli
+       mov save_stack_seg, SS
+       mov save_stack_ptr, SP
+       mov SS, large_stack_seg
+       mov SP, large_stack_ptr
+       sti
+    end;
+    mpu401_isr_inside;
+    asm
+       cli
+       mov SS, save_stack_seg;
+       mov SP, save_stack_ptr;
+       sti
+    end;
+end;
+
+{$F-}
+
+procedure mpu401_isr_inside;
 var
     b: byte;
 begin
-{    disable_int;}
+    {disable_int;}
     if (isr_debug) then writeln('ISR');
     while (port[stat_port] and DSR)=0 do begin
         b:=port[data_port];
         if (isr_debug) then writeln('ISR DATA ', hex(b));
         mpu401_handle_data(b);
     end;
-{    enable_int;}
+    {enable_int;}
     { tell the 8259 we have completed our ISR }
     port[$A0] := $20;
     port[$20] := $20;
 end;
-{$F-}
 
 procedure background_exithandler; far;
 begin;
@@ -454,6 +491,8 @@ begin
 end;
 
 begin
+    large_stack_seg:=seg(large_stack[4000]);
+    large_stack_ptr:=ofs(large_stack[4000]);
     debug:=false;
     isr_debug:=false;
     old_exitproc:=NIL;
