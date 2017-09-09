@@ -2,12 +2,13 @@ unit midifile;
 
 interface
 
+uses midiopt;
+
 const
    MAX_TRACK=16;
    NO_DELTA_LEFT=10000000;
 type
    Pbyte = ^byte;
-   TRemap = (REMAP_PLUS_ONE, REMAP_NONE);
    TTrack = record
              length: longint;
              raw: Pbyte;
@@ -38,8 +39,7 @@ type
 
 procedure load_midi_file(fn: string;
                          var midifile: TMidifile;
-                         remap: TRemap;
-                         debug: boolean);
+                         var opts: TMidiOptions);
 
 implementation
 
@@ -156,7 +156,7 @@ begin
     end;
 end;
 
-procedure load_midi_file(fn: string; var midifile: TMidifile; remap: TRemap; debug: boolean);
+procedure load_midi_file(fn: string; var midifile: TMidifile; var opts: TMidiOptions);
 var
     mf: file;
 begin
@@ -164,9 +164,9 @@ begin
     reset(mf,1);
     load_header(mf, midifile);
     while (not eof(mf)) do begin
-        load_chunk(mf, midifile, debug);
+        load_chunk(mf, midifile, opts.debug);
     end;
-    generate_track_map(midifile, remap);
+    generate_track_map(midifile, opts.remap);
     generate_voice_map(midifile);
     writeln('Load Complete.');
 end;

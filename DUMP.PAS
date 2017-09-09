@@ -2,15 +2,15 @@ unit dump;
 
 interface
 
-uses midifile, midiutil;
+uses midiopt, midifile, midiutil;
 
-procedure dump_meta(var p: pbyte; var count: longint; quiet: boolean);
-procedure dump_sysex(var p: pbyte; var count: longint; quiet: boolean);
-procedure dump_track(num: word; var m: TMidifile; quiet: boolean);
+procedure dump_meta(var p: pbyte; var count: longint; var opts: TMidiOptions);
+procedure dump_sysex(var p: pbyte; var count: longint; var opts: TMidiOptions);
+procedure dump_track(num: word; var m: TMidifile; var opts: TMidiOptions);
 
 implementation
 
-procedure dump_meta(var p: pbyte; var count: longint; quiet: boolean);
+procedure dump_meta(var p: pbyte; var count: longint; var opts: TMidiOptions);
 var
     this_count: byte;
     meta_len: longint;
@@ -24,18 +24,18 @@ begin
     scan_varint(p, this_count, meta_len);
     count:=count+this_count;
 
-    if (not quiet) then begin
+    if (not opts.quiet) then begin
         write('Meta ', hex(kind), ' len=', meta_len, ' ');
     end;
 
     if (kind = $51) then begin
         scan_3byte(p, tempo);
         count:=count+3;
-        if (not quiet) then writeln('tempo ', tempo);
+        if (not opts.quiet) then writeln('tempo ', tempo);
     end else begin
         count:=count+meta_len;
         inc(p, meta_len);
-        if (not quiet) then writeln;
+        if (not opts.quiet) then writeln;
     end;
 end;
 
@@ -63,7 +63,7 @@ begin
     inc(p, meta_len);
 end;
 
-procedure dump_sysex(var p: pbyte; var count: longint; quiet: boolean);
+procedure dump_sysex(var p: pbyte; var count: longint; var opts: TMidiOptions);
 var
     this_count: byte;
     meta_len: longint;
@@ -83,7 +83,7 @@ begin
     inc(p);
     inc(count);
 
-    if (not quiet) then begin
+    if (not opts.quiet) then begin
         writeln('Sysex manufacturer=', hex(kind), ' length=', count, ' ');
     end;
 end;
@@ -121,7 +121,7 @@ begin
     writeln;
 end;
 
-procedure dump_track(num: word; var m: TMidifile; quiet: boolean);
+procedure dump_track(num: word; var m: TMidifile; var opts: TMidiOptions);
 var
     p: pbyte;
     count: longint;
@@ -153,7 +153,7 @@ begin
         msg := p^;
         inc(p);
         inc(count);
-        if (not quiet) then write(' ', delta:8, ' ', hex(msg), ' ');
+        if (not opts.quiet) then write(' ', delta:8, ' ', hex(msg), ' ');
         if (msg <= $7F) then begin
             { running status }
             dec(p);
@@ -161,15 +161,15 @@ begin
             msg:=last_msg;
         end;
         if (msg = $F0) then begin;
-            dump_sysex(p, meta_len, quiet);
+            dump_sysex(p, meta_len, opts);
             count:=count+meta_len;
             inc(sysex_count);
         end else if (msg = $F7) then begin;
             { escape sysex }
-            if (not quiet) then writeln('sysex escape');
+            if (not opts.quiet) then writeln('sysex escape');
         end else if (msg = $FF) then begin
             meta:=p^;
-            dump_meta(p, meta_len, quiet);
+            dump_meta(p, meta_len, opts);
             count:=count+meta_len;
             inc(meta_count);
             if (meta = $2F) then begin
@@ -184,7 +184,7 @@ begin
             vv:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then writeln('Off ', kk, ' ', vv);
+            if (not opts.quiet) then writeln('Off ', kk, ' ', vv);
             channels_used[msg and $F]:=true;
         end else if (msg >= $90) and (msg <= $9F) then begin;
             kk:=p^;
@@ -193,7 +193,7 @@ begin
             vv:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then writeln('On ', kk, ' ', vv);
+            if (not opts.quiet) then writeln('On ', kk, ' ', vv);
             channels_used[msg and $F]:=true;
         end else if (msg >= $A0) and (msg <= $AF) then begin;
             kk:=p^;
@@ -202,7 +202,7 @@ begin
             vv:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then writeln('After ', kk, ' ', vv);
+            if (not opts.quiet) then writeln('After ', kk, ' ', vv);
         end else if (msg >= $B0) and (msg <= $BF) then begin;
             kk:=p^;
             inc(p);
@@ -210,12 +210,12 @@ begin
             vv:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then writeln('Control ', kk, ' ', vv);
+            if (not opts.quiet) then writeln('Control ', kk, ' ', vv);
         end else if (msg >= $C0) and (msg <= $CF) then begin;
             kk:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then  writeln('Program ', kk);
+            if (not opts.quiet) then  writeln('Program ', kk);
         end else if (msg >= $D0) and (msg <= $DF) then begin;
             kk:=p^;
             inc(p);
@@ -223,7 +223,7 @@ begin
             vv:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then writeln('Pres ', kk, ' ', vv);
+            if (not opts.quiet) then writeln('Pres ', kk, ' ', vv);
         end else if (msg >= $E0) and (msg <= $EF) then begin;
             kk:=p^;
             inc(p);
@@ -231,7 +231,7 @@ begin
             vv:=p^;
             inc(p);
             inc(count);
-            if (not quiet) then writeln('Pitch ', kk, ' ', vv);
+            if (not opts.quiet) then writeln('Pitch ', kk, ' ', vv);
         end else begin
             writeln('unknown msg ', msg);
             halt;

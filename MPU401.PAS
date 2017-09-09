@@ -17,7 +17,7 @@ unit mpu401;
 
 interface
 
-uses dos, crt, midifile, midiutil;
+uses dos, crt, midifile, midiutil, midiopt;
 
 const
     MPU401_DEFAULT_PORT = $330;
@@ -25,8 +25,7 @@ const
     DSR = 128;
     DRR = 64;
 var
-    debug: boolean;
-    isr_debug: boolean;
+    opts: TMidiOptions;
     division_mul: byte;
     division_div: byte;
 
@@ -42,7 +41,7 @@ var
     save_stack_ptr: word;
 
 { low-level operations }
-procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
+procedure mpu401_init(aport: word; anirq: word; var midi_opts: TMidiOptions);
 procedure mpu401_send_command(b: byte);
 procedure mpu401_send_data(b: byte);
 function mpu401_get_data: byte;
@@ -59,9 +58,6 @@ function mpu401_done_playing: boolean;
 { ISR stuff }
 procedure mpu401_handle_data(b: byte);
 procedure mpu401_polling;
-
-{ misc }
-procedure mpu401_set_debug(adebug: boolean; adebug_isr: boolean);
 
 procedure stack_analysis;
 
@@ -93,13 +89,13 @@ procedure mpu401_send_command(b: byte);
 var
   data: byte;
 begin
-  if (debug) then writeln('send_command (', hex(b), '): wait for DRR');
+  if (opts.debug) then writeln('send_command (', hex(b), '): wait for DRR');
 
   { poll for DRR (bit 6) to be 0 }
   while (port[stat_port] and DRR)=DRR do begin
   end;
 
-  if (debug) then writeln('send_command: DRR ready');
+  if (opts.debug) then writeln('send_command: DRR ready');
 
   disable_int;
 
@@ -118,7 +114,7 @@ begin
 
   enable_int;
 
-  if (debug) then writeln('send_command: complete');
+  if (opts.debug) then writeln('send_command: complete');
 end;
 
 procedure mpu401_send_data(b: byte);
@@ -127,7 +123,7 @@ begin
   while (port[stat_port] and DRR)=DRR do begin
   end;
 
-  if (isr_debug) then writeln('send data ',hex(b));
+  if (opts.debug_isr) then writeln('send data ',hex(b));
 
   port[data_port] := b;
 end;
@@ -180,7 +176,7 @@ begin
         division:=120;
     end;
 
-    if (debug) then writeln('starting start_play');
+    if (opts.debug) then writeln('starting start_play');
     mpu401_send_command(division_to_timebase(division));
     mpu401_send_command($EC);     { activate tracks }
     mpu401_send_data(trackmask);
@@ -191,7 +187,7 @@ begin
     end;
     mpu401_send_command($B8);     { clear play counters }
     mpu401_send_command($0A);     { start play }
-    if (debug) then writeln('done start_play');
+    if (opts.debug) then writeln('done start_play');
 end;
 
 procedure mpu401_stop_play;
@@ -211,7 +207,7 @@ begin
       track_num:=m_playing.track_reverse_map[track_num];
   end;
 
-  if (isr_debug) then writeln('track_data_req ', track_num);
+  if (opts.debug_isr) then writeln('track_data_req ', track_num);
 
   while true do begin;
     { Any time we send a reply, call `exit` to leave this function.
@@ -222,7 +218,7 @@ begin
             complete:=true;
         end;
         if (complete)  then begin
-            if (isr_debug) then writeln('send FC');
+            if (opts.debug_isr) then writeln('send FC');
             mpu401_send_data(0);    { zero timing byte }
             mpu401_send_data($FC);  { end of track }
             exit; { RETURN }
@@ -233,12 +229,12 @@ begin
                 delta_left:=round(delta_left*division_mul/division_div);
             end;
             play_count:=play_count+this_len;
-            if (isr_debug) then writeln('delta ', delta_left);
+            if (opts.debug_isr) then writeln('delta ', delta_left);
         end;
         if (delta_left>=240) then begin
             mpu401_send_data($F8);  { timing overflow; come back in 240 ticks }
             delta_left:=delta_left - 240;
-            if (isr_debug) then writeln('sent F8 delta_left=', delta_left);
+            if (opts.debug_isr) then writeln('sent F8 delta_left=', delta_left);
             exit; { RETURN }
         end;
 
@@ -248,11 +244,11 @@ begin
         inc(play_ptr);
         inc(play_count);
 
-        if (isr_debug) then writeln('msg  ',hex(msg));
+        if (opts.debug_isr) then writeln('msg  ',hex(msg));
 
         if (msg<=$7F) then begin
             { running status }
-            if (isr_debug) then writeln('running status');
+            if (opts.debug_isr) then writeln('running status');
             msg:=last_msg;
             { put back the byte we read, so we can process as normal }
             dec(play_ptr);
@@ -271,7 +267,7 @@ begin
                     inc(play_ptr);
                     inc(play_count);
                 end;
-                if (isr_debug) then writeln('ignore voice in conductor channel');
+                if (opts.debug_isr) then writeln('ignore voice in conductor channel');
             end else begin;
                 mpu401_send_data(delta_left);  { send the timing byte }
                 delta_left:=NO_DELTA_LEFT;
@@ -285,12 +281,12 @@ begin
                     inc(play_ptr);
                     inc(play_count);
                 end;
-                if (isr_debug) then writeln('send voice ');
+                if (opts.debug_isr) then writeln('send voice ');
                 exit; { RETURN }
             end;
         end else if (msg=$FF) then begin { meta }
             meta:=play_ptr^;
-            if (isr_debug) then writeln('meta ', hex(meta));
+            if (opts.debug_isr) then writeln('meta ', hex(meta));
             inc(play_ptr);
             inc(play_count);
             scan_varint(play_ptr, this_len, meta_len);
@@ -298,11 +294,11 @@ begin
             play_count:=play_count+meta_len;
             meta_ptr:=play_ptr;
             inc(play_ptr, meta_len);
-            if (isr_debug) then writeln('meta_len ', meta_len);
+            if (opts.debug_isr) then writeln('meta_len ', meta_len);
 
             if (meta = $2F) then begin
                 { end of track }
-                if (isr_debug) then writeln('send FC due to 2F');
+                if (opts.debug_isr) then writeln('send FC due to 2F');
                 mpu401_send_data(delta_left);
                 delta_left:=NO_DELTA_LEFT;
                 mpu401_send_data($FC);
@@ -313,16 +309,16 @@ begin
                 mpu401_send_data(delta_left);
                 mpu401_send_data($E0); { set tempo }
                 mpu401_send_data(tempo_to_bpm(tempo));
-                if (isr_debug) then writeln('send tempo change to ', tempo_to_bpm(tempo));
+                if (opts.debug_isr) then writeln('send tempo change to ', tempo_to_bpm(tempo));
                 exit; { RETURN }
             end else begin
-                if (isr_debug) then writeln('skip meta');
+                if (opts.debug_isr) then writeln('skip meta');
                 delta_left:=NO_DELTA_LEFT;
                 { ignore the meta, and loop around }
             end;
         end else if (msg = $F0) then begin
             { sysex - ignore it }
-            if (isr_debug) then writeln('skip sysex');
+            if (opts.debug_isr) then writeln('skip sysex');
             delta_left:=NO_DELTA_LEFT;
             while (play_ptr^ <> $F7) do begin
                 inc(play_ptr);
@@ -345,7 +341,7 @@ begin
     end else if (b=$F9) then begin
         mpu401_handle_track_data_req(m_playing.conductor_track_num, true); { conductor }
     end else if (b=$FC) then begin
-        if (isr_debug) then writeln('FC All  End Received');
+        if (opts.debug_isr) then writeln('FC All  End Received');
         m_playing.done_playing:=true;
     end else begin
         writeln('ERROR: bad byte in handle_data ', hex(b));
@@ -392,17 +388,12 @@ procedure mpu401_isr;
 var
     b: byte;
 begin
-    {disable_int;}
-    if (isr_debug) then writeln('ISR');
+    if (opts.debug_isr) then writeln('ISR');
     while (port[stat_port] and DSR)=0 do begin
         b:=port[data_port];
-        if (isr_debug) then writeln('ISR DATA ', hex(b));
+        if (opts.debug_isr) then writeln('ISR DATA ', hex(b));
         mpu401_handle_data(b);
     end;
-    {enable_int;}
-    { tell the 8259 we have completed our ISR }
-    port[$A0] := $20;
-    port[$20] := $20;
 end;
 
 {$F+}
@@ -424,6 +415,9 @@ begin
        mov SP, save_stack_ptr;
        sti
     end;
+    { tell the 8259 we have completed our ISR }
+    port[$A0] := $20;
+    port[$20] := $20;
 end;
 
 {$F-}
@@ -438,10 +432,12 @@ begin;
   end;
 end;
 
-procedure mpu401_init(aport: word; anirq: word; install_isr: boolean);
+procedure mpu401_init(aport: word; anirq: word; var midi_opts: TMidiOptions);
 var
     junk: byte;
 begin
+    opts:=midi_opts;
+
     stat_port:=aport+1; { verify! }
     com_port:=aport+1; { verify! }
     data_port:=aport;
@@ -457,19 +453,21 @@ begin
     old_intvec:=NIL;
     old_exitproc:=ExitProc;
 
-    if (install_isr) then begin
-        if (debug) then writeln('set exitproc');
+    if (not opts.polling) then begin
+        if (opts.debug) then writeln('set exitproc');
         ExitProc:=@background_exithandler;
         GetIntVec(vec, old_intvec);
-        if (debug) then writeln('set int vec');
+        if (opts.debug) then writeln('set int vec');
         SetIntVec(vec, @mpu401_isr_wrapper);
     end;
 
-    mpu401_send_command($FF); { reset }
-    delay(100);
+    if (opts.reset) then begin
+        mpu401_send_command($FF); { reset }
+        delay(100);
+    end;
     junk := port[data_port];
 
-    if (debug) then writeln('init complete');
+    if (opts.debug) then writeln('init complete');
 end;
 
 procedure mpu401_polling;
@@ -487,12 +485,6 @@ begin
             exit;
         end;
     end;
-end;
-
-procedure mpu401_set_debug(adebug: boolean; adebug_isr: boolean);
-begin
-    debug:=adebug;
-    isr_debug:=adebug_isr;
 end;
 
 procedure stack_analysis;
@@ -517,8 +509,8 @@ begin
     isr_stack_seg:=seg(isr_stack[sizeof(isr_stack)-8]);
     isr_stack_ptr:=ofs(isr_stack[sizeof(isr_stack)-8]);
 
-    debug:=false;
-    isr_debug:=false;
+    set_default_options(opts);
+
     old_exitproc:=NIL;
     old_intvec:=NIL;
 end.

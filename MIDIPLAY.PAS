@@ -7,7 +7,7 @@
   initializes things, complains, etc.
 }
 
-uses midifile, dump, midiutil, mpu401, crt;
+uses midiopt, midifile, dump, midiutil, mpu401, crt;
 
 procedure fix_stdio;
 var
@@ -59,104 +59,98 @@ end;
 
 var
     midi_file: TMidiFile;
+    opts: TMidiOptions;
     filename: string;
-    do_dump, do_playback, do_help, do_primes, quiet, polling: boolean;
-    debug, debug_isr: boolean;
     i: integer;
     param: string;
-    remap: TRemap;
 begin;
     writeln('MPU-401 Intelligent Mode Player');
     writeln('Dr Scott M. Baker');
     writeln('http://www.smbaker.com/');
     writeln;
 
-    do_dump:=false;
-    do_playback:=false;
-    do_help:=false;
-    do_primes:=false;
-    quiet:=false;
-    polling:=false;
-    debug:=false;
-    debug_isr:=false;
-    remap:=REMAP_PLUS_ONE;
     filename:='';
     fix_stdio;
+    set_default_options(opts);
     for i:=1 to ParamCount do begin
         param:=upstr(ParamStr(i));
         if (param = '-D') then begin
-            do_dump:=true;
+            opts.do_dump:=true;
         end else if (param = '-Q') then begin
-            quiet:=true;
+            opts.quiet:=true;
         end else if (param = '-P') then begin
-            do_playback:=true;
+            opts.do_playback:=true;
         end else if (param = '-O') then begin
-            polling:=true;
+            opts.polling:=true;
         end else if (param = '-H') then begin
-            do_help:=true;
+            opts.do_help:=true;
+        end else if (param = '-K') then begin
+            opts.reset:=false;
         end else if (param = '-R') then begin
-            do_primes:=true;
+            opts.do_primes:=true;
         end else if (param = '-V') then begin
-            debug:=true;
+            opts.debug:=true;
         end else if (param = '-VV') then begin
-            debug_isr:=true;
+            opts.debug_isr:=true;
         end else if (param = '-M0') then begin
-            remap:=REMAP_NONE;
+            opts.remap:=REMAP_NONE;
         end else begin;
             filename:=ParamStr(i);
         end;
     end;
 
-    if (not do_playback) and (not do_dump) then begin
+    if (not opts.do_playback) and (not opts.do_dump) then begin
         writeln('(Hint: use "-H" for help or "-P <filename.mid>" to play a file)');
         writeln;
     end;
 
-    if (filename='') or (do_help) then begin
+    if (filename='') or (opts.do_help) then begin
         writeln('Syntax: midiplay [options] filename.mid');
-        writeln('   -H show help');
-        writeln('   -P play file');
-        writeln('   -D dump');
-        writeln('   -Q when dumping, dump quietly');
-        writeln('   -O use polling instead of ISR');
-        writeln('   -R compute prime numbers while doing background playback');
-        writeln('   -M0 do not remap tracks');
-        writeln('   -V be somewhat verbose');
-        writeln('   -VV be even more verbose');
+        writeln('   -H show Help');
+        writeln('   -P Play file');
+        writeln('   -D Dump');
+        writeln('   -K Keep midi config (aka do not reset)');
+        writeln('   -Q when dumping, dump Quietly');
+        writeln('   -O use pOlling instead of ISR');
+        writeln('   -R compute pRime numbers while doing background playback');
+        writeln('   -M0 do not reMap tracks');
+        writeln('   -V be somewhat Verbose');
+        writeln('   -VV be even more Verbose');
         exit;
     end;
 
-    load_midi_file(filename, midi_file, remap, debug);
+    load_midi_file(filename, midi_file, opts);
     writeln('Format=', midi_file.format,
             ' Tracks=', midi_file.num_tracks,
             ' Division=', midi_file.division);
 
-    if (do_dump) then begin
+    if (opts.do_dump) then begin
         for i:=0 to midi_file.cur_track-1 do begin
            writeln('=== Dump Track ', i, ' ===');
-           dump_track(i, midi_file, quiet);
+           dump_track(i, midi_file, opts);
         end;
     end;
 
-    if (do_playback) then begin
-        mpu401_set_debug(debug, debug_isr);
-        mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ, not polling);
+    if (opts.do_playback) then begin
+        mpu401_init(MPU401_DEFAULT_PORT, MPU401_DEFAULT_IRQ, opts);
         mpu401_play_file(midi_file);
-        if polling then begin;
+        if opts.polling then begin;
             writeln('polling -- press any key to exit');
             mpu401_polling;
         end else begin;
             writeln('background playing -- press any key to exit');
-            if (do_primes) then begin
+            if (opts.do_primes) then begin
                 bruteprime;
             end else begin
-                while (not keypressed) and (not mpu401_done_playing) do delay(100);
+                while (not keypressed) and (not mpu401_done_playing) do begin
+                    delay(100);
+                end;
                 if mpu401_done_playing then begin
                     writeln('Song Complete.');
                 end;
             end;
         end;
         mpu401_stop_play;
-        { stack_analysis; }
+        stack_analysis;
     end;
 end.
